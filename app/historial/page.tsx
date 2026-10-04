@@ -49,7 +49,7 @@ async function OrderList({ token }: { token: string }) {
           <Link href={`/historial/${o.id}`} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-5 hover:ring-2 hover:ring-anil/30">
             <div>
               <p className="font-bold">Orden {o.orderNumber}</p>
-              <p className="text-sm text-gris">{formatDate(o.createdAt)}{o.items.length ? `, ${o.items.length} productos` : ""}</p>
+              <p className="text-sm text-gris">{formatDate(o.createdAt)}{o.items.length ? `, ${o.items.length} ${o.items.length === 1 ? "producto" : "productos"}` : ""}</p>
             </div>
             <div className="flex items-center gap-4">
               <span className="font-extrabold">{formatMoney(o.total)}</span>
