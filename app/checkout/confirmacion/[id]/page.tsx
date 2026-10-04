@@ -23,7 +23,7 @@ export default async function ConfirmationPage({ params }: PageProps<"/checkout/
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      {paid && <ClearCart />}
+      {paid && <ClearCart orderId={order.id} />}
       <div className={`rounded-3xl p-8 text-white ${paid ? "bg-anil" : "bg-tinta"}`}>
         <h1 className="text-3xl font-extrabold tracking-tight">
           {paid ? "Pago aprobado, gracias por tu compra" : "Tu orden aún no está pagada"}

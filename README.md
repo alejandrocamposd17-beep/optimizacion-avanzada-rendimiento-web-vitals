@@ -1,7 +1,7 @@
 # Optimización Avanzada de Rendimiento: Dominio de Web Vitals y Mutaciones Asíncronas en el Servidor
 
 **Autor:** Alejandro Campos
-**Stack:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4
+**Stack:** Next.js 16 (App Router, Cache Components) · React 19.3 · TypeScript · Tailwind CSS 4
 **API consumida:** [ecommerce-api-laravel](https://github.com/alejandrocamposd17-beep/ecommerce-api-laravel) (Laravel 12 + Sanctum + Swagger + Stripe)
 
 Frontend de e-commerce ("Tienda Añil") que consume la API REST creada previamente e implementa el flujo completo de compra: catálogo, autenticación, carrito, orden, pago con Stripe e historial. Las lecturas se hacen con **Server Components** y todas las mutaciones con **Server Actions**, priorizando rendimiento (Web Vitals) y seguridad del token.
@@ -34,7 +34,7 @@ El proyecto incluye `.env.example`:
 
 ```env
 # URL base de la API Laravel (incluye /api). Solo la usa el servidor de Next.js.
-API_BASE_URL=http://localhost:8000/api
+API_BASE_URL=http://127.0.0.1:8000/api
 ```
 
 Copiarlo como `.env.local` y ajustar la URL si la API corre en otro host o puerto. La variable **no** lleva el prefijo `NEXT_PUBLIC_`, por lo que nunca se envía al navegador: todas las llamadas a la API salen desde el servidor de Next.js.
@@ -64,6 +64,8 @@ npm start
 ```
 
 Usuario de prueba sembrado por la API: `alejandro@example.com` / `password`.
+
+> **Windows:** si PowerShell bloquea `npm` con un error de seguridad (`PSSecurityException`), use `npm.cmd` (`npm.cmd install`, `npm.cmd run build`, `npm.cmd start`). Si la API corre con el servidor de PHP en `127.0.0.1`, use `API_BASE_URL=http://127.0.0.1:8000/api` en lugar de `localhost`.
 
 > **API simulada (opcional):** `npm run mock-api` levanta en el puerto 8000 una API en memoria con el mismo contrato que la de Laravel (respuestas `{ success, message, data }`, códigos 401/402/404/409/422). Sirve solo para revisar la interfaz sin Laravel; las capturas de Swagger y de Stripe se toman con la API real.
 
@@ -101,11 +103,18 @@ Las rutas protegidas se validan en `proxy.ts` (en Next.js 16 el antiguo `middlew
 
 ## Arquitectura: lecturas y mutaciones
 
-**Lecturas (Server Components).** `lib/api.ts` está marcado con `server-only`, así que el cliente HTTP y el token nunca terminan en el bundle del navegador. El catálogo usa la caché de datos de Next.js:
+**Lecturas (Server Components).** `lib/api.ts` está marcado con `server-only`, así que el cliente HTTP y el token nunca terminan en el bundle del navegador. El catálogo público se cachea con la directiva `use cache` de Cache Components:
 
 ```ts
-fetch(`${BASE_URL}/products`, { next: { revalidate: 60, tags: ["products"] } })
+export async function getProducts(params) {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("products");
+  // ...fetch a /api/products
+}
 ```
+
+Los datos privados (historial, órdenes, perfil) nunca se cachean: se piden con `cache: "no-store"` y el token del usuario.
 
 **Mutaciones (Server Actions en `lib/actions.ts`).** Login, registro, logout, creación de orden, pago y reintento de pago. Los formularios usan `useActionState` para mostrar errores de validación (422) y `useFormStatus` para deshabilitar el botón mientras la mutación está en curso, evitando dobles envíos.
 
@@ -121,8 +130,7 @@ Si la tarjeta es rechazada (402), la orden queda creada como `failed` y el usuar
 **Sin interfaces desactualizadas después de mutar:**
 
 ```ts
-updateTag(ordersTag(token));   // historial del usuario: el siguiente request trae datos frescos
-updateTag("products");         // el stock del catálogo se actualiza tras la compra
+updateTag("products");         // el stock cambió: el catálogo cacheado se descarta de inmediato
 revalidatePath("/historial");
 revalidatePath(`/historial/${orderId}`);
 revalidatePath("/", "layout"); // tras login/logout, la barra muestra la sesión correcta
@@ -141,18 +149,35 @@ En Next.js 16, `updateTag` es la variante de `revalidateTag` pensada para Server
 
 | Requisito | Implementación |
 |-----------|----------------|
-| `loading.tsx` en rutas clave | `app/(catalogo)/loading.tsx`, `app/(catalogo)/productos/[id]/loading.tsx`, `app/checkout/loading.tsx`, `app/historial/loading.tsx` |
+| `loading.tsx` en rutas clave | Catálogo, detalle, checkout, confirmación, historial, detalle de orden, login y registro |
 | `error.tsx` por segmento | `app/error.tsx`, `app/(catalogo)/error.tsx`, `app/checkout/error.tsx`, `app/historial/error.tsx` con botón **Reintentar** (`reset()`) |
 | Suspense en sección pesada | Lista de productos (`/`) e historial (`/historial`) se transmiten por streaming con skeletons |
 | Evitar UI desactualizada | `updateTag` y `revalidatePath` después de cada mutación |
 | Medición de Web Vitals | `components/WebVitals.tsx` usa `useReportWebVitals` (LCP, CLS, INP, FCP, TTFB en consola en desarrollo) + reporte Lighthouse |
+
+### Optimización avanzada: Cache Components (Partial Prerendering)
+
+`next.config.ts` activa `cacheComponents: true`. Con esto cada ruta se divide en dos partes:
+
+- **Shell estático prerenderizado en el build:** barra de navegación, encabezado del catálogo (el elemento LCP), formularios y skeletons. Se sirve al instante, sin esperar a la API.
+- **Partes dinámicas transmitidas por streaming dentro de `<Suspense>`:** el nombre del usuario (cookie), los resultados según la búsqueda (`searchParams`) y los datos de la API.
+
+Decisiones que lo hacen posible:
+
+- El layout ya no lee la cookie: solo el componente `SessionNav` lo hace, dentro de `<Suspense>` y con un placeholder del mismo tamaño (sin CLS).
+- La página del catálogo no espera `searchParams`: el encabezado queda en el shell y la lista se resuelve en `CatalogResults`.
+- El build no necesita la API encendida: ningún dato se pide durante el prerender.
+- `ClearCart` vacía el carrito una sola vez por orden, porque Cache Components conserva las rutas visitadas con `<Activity>` y re-ejecuta sus efectos al volver.
+
+En el build, todas las páginas aparecen como `◐ (Partial Prerender)`.
 
 Otras decisiones para Web Vitals:
 
 - **LCP:** imágenes de producto con `next/image` (redimensionadas, AVIF/WebP, `sizes` por breakpoint) y `preload` solo en las primeras del catálogo y en el detalle; el resto se carga en diferido. Productos sin imagen usan una lámina generada con CSS. Sin fuentes web: tipografía del sistema.
 - **CLS:** skeletons con las mismas dimensiones del contenido final y contenedores de imagen con relación de aspecto fija (`aspect-[4/3]`).
 - **INP:** casi todo es Server Component; el JavaScript del cliente se limita al carrito y a los formularios. La búsqueda es un formulario GET que funciona sin JavaScript.
-- **TTFB:** catálogo cacheado 60 s con etiqueta `products`.
+- **TTFB:** shell estático servido al instante y catálogo cacheado con `use cache` (perfil `minutes`, etiqueta `products`).
+- **SEO:** `app/robots.ts` excluye de la indexación las rutas privadas (checkout, historial, carrito).
 - Accesibilidad: enlace "Saltar al contenido", foco visible, `aria-live` en estados y respeto a `prefers-reduced-motion`.
 
 ## Evidencias

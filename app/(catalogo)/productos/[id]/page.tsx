@@ -1,33 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ApiError, getProduct } from "@/lib/api";
+import { getProduct } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { ProductTile } from "@/components/ProductTile";
 import { AddToCartButton } from "@/components/AddToCartButton";
 
-async function load(id: string) {
-  try {
-    return await getProduct(id);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) notFound();
-    throw error;
-  }
-}
-
 export async function generateMetadata({ params }: PageProps<"/productos/[id]">): Promise<Metadata> {
   const { id } = await params;
-  try {
-    const p = await getProduct(id);
-    return { title: p.name, description: p.description ?? undefined };
-  } catch {
-    return { title: "Producto" };
-  }
+  const p = await getProduct(id).catch(() => null);
+  return p ? { title: p.name, description: p.description ?? undefined } : { title: "Producto no encontrado" };
 }
 
 export default async function ProductPage({ params }: PageProps<"/productos/[id]">) {
   const { id } = await params;
-  const product = await load(id);
+  const product = await getProduct(id);
+  if (!product) notFound();
 
   return (
     <div className="flex flex-col gap-6">

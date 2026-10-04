@@ -1,11 +1,11 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { CartProvider } from "@/components/CartProvider";
 import { CartLink } from "@/components/CartLink";
 import { WebVitals } from "@/components/WebVitals";
-import { getSessionUserName } from "@/lib/session";
-import { logoutAction } from "@/lib/actions";
+import { SessionNav, SessionNavFallback } from "@/components/SessionNav";
 
 export const metadata: Metadata = {
   title: { default: "Tienda Añil", template: "%s | Tienda Añil" },
@@ -15,9 +15,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#233a8f" };
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const userName = await getSessionUserName();
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es">
       <body className="flex min-h-screen flex-col antialiased">
@@ -36,16 +34,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 <Link href="/historial" className="rounded-full px-3 py-2 hover:bg-white/10">Mis compras</Link>
               </nav>
               <div className="flex items-center gap-2">
-                {userName ? (
-                  <>
-                    <span className="hidden text-sm text-white/80 sm:inline">Hola, {userName.split(" ")[0]}</span>
-                    <form action={logoutAction}>
-                      <button className="rounded-full px-3 py-2 text-sm hover:bg-white/10">Cerrar sesión</button>
-                    </form>
-                  </>
-                ) : (
-                  <Link href="/login" className="rounded-full px-3 py-2 text-sm hover:bg-white/10">Iniciar sesión</Link>
-                )}
+                {/* Solo esta parte depende de la cookie: el resto del layout es estático */}
+                <Suspense fallback={<SessionNavFallback />}>
+                  <SessionNav />
+                </Suspense>
                 <CartLink />
               </div>
             </div>
@@ -56,7 +48,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <footer className="border-t border-anil/10 bg-white">
             <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-gris">
               Pagos en modo prueba de Stripe, no se cobra dinero real.
-            
             </div>
           </footer>
         </CartProvider>

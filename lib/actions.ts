@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
-import { apiFetch, ApiError, extractAuth, extractPaymentId, extractPaymentStatus, ordersTag, PRODUCTS_TAG } from "./api";
+import { apiFetch, ApiError, extractAuth, extractPaymentId, extractPaymentStatus, PRODUCTS_TAG } from "./api";
 import { clearSession, getToken, saveSession } from "./session";
 import type { ActionState, CartLine } from "./types";
 
@@ -87,9 +87,8 @@ async function payOrder(token: string, orderId: number, paymentMethod: string) {
 }
 
 /** Evita UI desactualizada: historial, detalle y stock del catálogo se refrescan tras la mutación. */
-function refreshAfterPurchase(token: string, orderId?: number) {
-  updateTag(ordersTag(token));
-  updateTag(PRODUCTS_TAG);
+function refreshAfterPurchase(orderId?: number) {
+  updateTag(PRODUCTS_TAG); // el stock cambió: el catálogo cacheado se descarta de inmediato
   revalidatePath("/historial");
   if (orderId) revalidatePath(`/historial/${orderId}`);
 }
@@ -133,7 +132,7 @@ export async function checkoutAction(_prev: ActionState, formData: FormData): Pr
     await payOrder(token, orderId, paymentMethod);
   } catch (error) {
     if (orderId) {
-      refreshAfterPurchase(token, orderId);
+      refreshAfterPurchase(orderId);
       const state = toState(error);
       // 402: Stripe rechazó la tarjeta y la API marca la orden como "failed" (no se puede volver a pagar).
       if (error instanceof ApiError && error.status === 402) {
@@ -150,7 +149,7 @@ export async function checkoutAction(_prev: ActionState, formData: FormData): Pr
     return toState(error);
   }
 
-  refreshAfterPurchase(token, orderId);
+  refreshAfterPurchase(orderId);
   redirect(`/checkout/confirmacion/${orderId}`);
 }
 
@@ -165,9 +164,9 @@ export async function retryPaymentAction(_prev: ActionState, formData: FormData)
   try {
     await payOrder(token, orderId, paymentMethod);
   } catch (error) {
-    refreshAfterPurchase(token, orderId);
+    refreshAfterPurchase(orderId);
     return toState(error);
   }
-  refreshAfterPurchase(token, orderId);
+  refreshAfterPurchase(orderId);
   redirect(`/checkout/confirmacion/${orderId}`);
 }

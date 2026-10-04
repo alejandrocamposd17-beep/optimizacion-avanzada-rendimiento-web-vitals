@@ -1,4 +1,5 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
 import type { Order, OrderItem, Paginated, Product, User } from "./types";
 
 /**
@@ -9,7 +10,6 @@ import type { Order, OrderItem, Paginated, Product, User } from "./types";
 const BASE_URL = (process.env.API_BASE_URL ?? "http://localhost:8000/api").replace(/\/$/, "");
 
 export const PRODUCTS_TAG = "products";
-export const ordersTag = (token: string) => `orders-${token.slice(-16)}`;
 
 export class ApiError extends Error {
   constructor(
@@ -34,7 +34,6 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   token?: string | null;
-  next?: NextFetchRequestConfig;
   cache?: RequestCache;
 };
 
@@ -49,7 +48,6 @@ export async function apiFetch<T = unknown>(path: string, opts: RequestOptions =
       method: opts.method ?? "GET",
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      next: opts.next,
       cache: opts.cache,
     });
   } catch {
@@ -146,22 +144,31 @@ function toPaginated<T>(env: Envelope, map: (r: Raw) => T): Paginated<T> {
 /* ---------- Lecturas (Server Components) ---------- */
 
 export async function getProducts(params: { search?: string; page?: number; perPage?: number } = {}) {
+  "use cache";
+  // Catálogo público: se cachea por combinación de búsqueda/página y se etiqueta
+  // con "products" para invalidarlo tras una compra (cambia el stock).
+  cacheLife("minutes");
+  cacheTag(PRODUCTS_TAG);
   const qs = new URLSearchParams();
   if (params.search) qs.set("search", params.search);
   qs.set("page", String(params.page ?? 1));
   qs.set("per_page", String(params.perPage ?? 12));
-  const env = await apiFetch(`/products?${qs}`, {
-    // Catálogo público: cacheado 60 s y etiquetado para invalidarlo tras una compra (stock).
-    next: { revalidate: 60, tags: [PRODUCTS_TAG] },
-  });
+  const env = await apiFetch(`/products?${qs}`);
   return toPaginated(env, toProduct);
 }
 
-export async function getProduct(id: string) {
-  const env = await apiFetch(`/products/${encodeURIComponent(id)}`, {
-    next: { revalidate: 60, tags: [PRODUCTS_TAG, `product-${id}`] },
-  });
-  return toProduct(unwrap(env.data));
+/** Devuelve null si el producto no existe (404), para que la página muestre notFound(). */
+export async function getProduct(id: string): Promise<Product | null> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(PRODUCTS_TAG, `product-${id}`);
+  try {
+    const env = await apiFetch(`/products/${encodeURIComponent(id)}`);
+    return toProduct(unwrap(env.data));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export async function getMe(token: string): Promise<User> {
@@ -177,7 +184,8 @@ export async function getMe(token: string): Promise<User> {
 }
 
 export async function getOrders(token: string) {
-  const env = await apiFetch(`/orders?per_page=50`, { token, next: { revalidate: 300, tags: [ordersTag(token)] } });
+  // Datos privados del usuario: siempre frescos, nunca en caché compartida.
+  const env = await apiFetch(`/orders?per_page=50`, { token, cache: "no-store" });
   return toPaginated(env, toOrder).items;
 }
 

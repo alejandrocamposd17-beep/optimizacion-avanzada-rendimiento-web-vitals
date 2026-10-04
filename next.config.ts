@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Cache Components = Partial Prerendering: cada ruta sirve al instante un "shell" estático
+  // prerenderizado y transmite por streaming solo las partes dinámicas (sesión, datos de la API).
+  cacheComponents: true,
   poweredByHeader: false, // no exponer la versión del framework
   reactStrictMode: true,
   compress: true,
