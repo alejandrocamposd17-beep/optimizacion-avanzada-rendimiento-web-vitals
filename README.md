@@ -219,4 +219,4 @@ docs/evidencias/                 # Capturas y reporte Lighthouse
 
 ---
 
-Proyecto académico desarrollado por **Alejandro Campos**.
+Desarrollado por **Alejandro Campos**.
