@@ -55,7 +55,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           </main>
           <footer className="border-t border-anil/10 bg-white">
             <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-gris">
-              Proyecto académico de Alejandro Campos. Pagos en modo prueba de Stripe, no se cobra dinero real.
+              Pagos en modo prueba de Stripe, no se cobra dinero real.
+            
             </div>
           </footer>
         </CartProvider>
