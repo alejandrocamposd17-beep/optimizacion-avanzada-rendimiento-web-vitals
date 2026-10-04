@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* Paleta inspirada en el añil salvadoreño (tinte índigo) y el maíz */
+@theme {
+  --color-anil: #233a8f;
+  --color-anil-deep: #16245c;
+  --color-anil-soft: #dfe5f7;
+  --color-maiz: #f2b33d;
+  --color-tinta: #1b1e2b;
+  --color-niebla: #eef1f8;
+  --color-gris: #5b6175;
+  --color-ok: #146c43;
+  --color-error: #b42318;
+  --font-sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-niebla);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-maiz);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Lámina "teñida" que reemplaza fotos: cero imágenes externas = mejor LCP y CLS 0 */
+.tile {
+  --h: 228;
+  background-color: hsl(var(--h) 60% 34%);
+  background-image:
+    repeating-linear-gradient(135deg, hsl(var(--h) 65% 42% / 0.55) 0 10px, transparent 10px 22px),
+    repeating-linear-gradient(45deg, hsl(var(--h) 70% 22% / 0.45) 0 6px, transparent 6px 18px);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e3e7f2 0%, #f3f5fb 50%, #e3e7f2 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  * { scroll-behavior: auto !important; transition: none !important; }
+}
